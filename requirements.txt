@@ -1,0 +1,6 @@
+torch
+pycryptodome
+scikit-learn
+wfdb
+pandas
+seaborn
