@@ -7,10 +7,8 @@ import numpy as np
 import os
 import json
 import pickle
+import argparse
 
-# Konfigurasi Klien
-HOST = '10.34.100.121'  # Loopback address
-PORT = 65433  # Port server
 PICKLE_PROTOCOL = 4
 
 # Model CNN1D dari dokumen pertama
@@ -227,13 +225,28 @@ def load_model_from_pickle(filename="model.pickle"):
     else:
         raise ValueError(f"Unknown architecture: {model_data['architecture']}")
 
+import argparse
+
 def main():
-    # Define paths
-    json_data_path = "./data/train.json"  # Path to your JSON file
-    class_mapper_path = "./data/class-mapper.json"  # Path to class mapper
-    base_dir = ""  # Base directory if paths in JSON are relative
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Federated Learning Client')
+    parser.add_argument('--host', type=str, default='127.0.0.1', help='Server host address')
+    parser.add_argument('--port', type=int, default=65432, help='Server port number')
+    parser.add_argument('--client_id', type=str, required=True, help='Unique client identifier')
+    args = parser.parse_args()
     
+    # Get network parameters
+    HOST = args.host
+    PORT = args.port
+    CLIENT_ID = args.client_id
+
+    json_data_path = f'./data/train_{CLIENT_ID}.json'
+    class_mapper_path = './data/class-mapper.json'
+    base_dir = ""    
+    print(f"Client ID: {CLIENT_ID}")
+    print(f"Server: {HOST}:{PORT}")
     print("Loading data from JSON...")
+    
     try:
         # Load data
         data_paths, labels, metadata, label_names, label_to_idx, idx_to_label = load_data_from_json(
@@ -259,14 +272,18 @@ def main():
         trained_model = train_local_model(local_model, train_loader, epochs=1)
         
         # Save model to pickle format
-        model_pickle_file = save_model_to_pickle(trained_model, "./models/local/local_model.pickle")
+        model_pickle_file = save_model_to_pickle(trained_model, f"./models/local/local_model_{CLIENT_ID}.pickle")
         
         # Koneksi ke Server
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
                 s.connect((HOST, PORT))
                 print(f"Terhubung ke server di {HOST}:{PORT}")
-
+                
+                # Send client ID first
+                print(f"Mengirim client ID: {CLIENT_ID}")
+                send_data(s, CLIENT_ID.encode())
+                
                 # Read the pickle file and send it
                 with open(model_pickle_file, 'rb') as f:
                     model_data = f.read()
@@ -274,32 +291,30 @@ def main():
                 # Kirim model
                 print(f"Mengirim model (ukuran: {len(model_data)} bytes)")
                 send_data(s, model_data)
-
+                
                 # Terima model global
                 print("Menunggu model global...")
                 received_data = receive_data(s)
                 print(f"Menerima model global (ukuran: {len(received_data)} bytes)")
                 
                 # Save received model to file
-                with open("./models/global/global_model.pickle", 'wb') as f:
+                with open(f"./models/global/global_model_{CLIENT_ID}.pickle", 'wb') as f:
                     f.write(received_data)
                 
                 # Load the model for verification
                 try:
-                    global_model = load_model_from_pickle("./models/global/global_model.pickle")
+                    global_model = load_model_from_pickle(f"./models/global/global_model_{CLIENT_ID}.pickle")
                     print("Model global berhasil dimuat.")
                 except Exception as e:
                     print(f"Error saat memuat model global: {e}")
                 
                 print("Model global diterima dan disimpan.")
-
+                
             except Exception as e:
                 print(f"Error pada komunikasi dengan server: {e}")
-    
+                
     except Exception as e:
         print(f"Error saat memuat data: {e}")
 
-    print("Klien selesai.")
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

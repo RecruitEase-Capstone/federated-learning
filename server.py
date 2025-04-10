@@ -7,10 +7,8 @@ from collections import OrderedDict
 import pickle
 import os
 import torch.nn.functional as F  
+import argparse
 
-#Konfigurasi Server
-HOST = '0.0.0.0'  # Mendengarkan di semua interface
-PORT = 65433  # Port untuk mendengarkan
 PICKLE_PROTOCOL = 4  # Protokol pickle yang kompatibel
 
 # Locks untuk thread safety
@@ -254,6 +252,17 @@ def handle_client(conn, addr, global_model, client_models, client_weights, clien
             pass
 
 def main():
+
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Federated Learning Client')
+    parser.add_argument('--host', type=str, default='127.0.0.1', help='Server host address')
+    parser.add_argument('--port', type=int, default=65432, help='Server port number')
+    args = parser.parse_args()
+    
+    # Get network parameters
+    HOST = args.host
+    PORT = args.port
+
     # Inisialisasi Model Global
     global_model = CNN1D()
     
