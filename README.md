@@ -26,5 +26,5 @@ git clone https://github.com/RecruitEase-Capstone/federated-learning.git
 2. Make sure `num_clients` in the `server.py` same as the number of client that will train the model
 3. To run the code on the `Server` side you can use :
 ```sh
-python client.py
+python server.py
 ```
