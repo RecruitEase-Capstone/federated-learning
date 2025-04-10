@@ -3,3 +3,4 @@ data
 data.zip
 .venv
 models
+__pycache__

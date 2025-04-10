@@ -7,11 +7,14 @@ import numpy as np
 import os
 import json
 import pickle
+from utils import generate_mask, apply_mask
 
 # Konfigurasi Klien
 HOST = '0.0.0.0'  # Loopback address
 PORT = 65433  # Port server
 PICKLE_PROTOCOL = 4
+
+client_id = 1
 
 # Model CNN1D dari dokumen pertama
 class CNN1D(nn.Module):
@@ -257,9 +260,24 @@ def main():
         
         # Train the model locally
         trained_model = train_local_model(local_model, train_loader, epochs=1)
+
+        print("Applying mask to local model update...")
+
+        seed = 1234 + client_id
+        print(f"Using seed for masking: {seed}")
+
+        mask = generate_mask(trained_model, seed)
+        if client_id % 2 == 0:
+            masked_model = apply_mask(trained_model, mask, mode="sub")
+        else:
+            masked_model = apply_mask(trained_model, mask, mode="add")
+
+        print(f"Client ID: {client_id} menggunakan mode: {'add (+r)' if client_id % 2 != 0 else 'sub (-r)'}")
+
+        model_data = pickle.dumps(masked_model)
         
         # Save model to pickle format
-        model_pickle_file = save_model_to_pickle(trained_model, "./models/local/local_model.pickle")
+        model_pickle_file = save_model_to_pickle(masked_model, "./models/local/local_model.pickle")
         
         # Koneksi ke Server
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:

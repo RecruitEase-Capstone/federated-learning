@@ -129,12 +129,14 @@ def recv_large_data(sock):
 
 def federated_averaging(global_model, client_models, client_weights):
     """Lakukan federated averaging dengan penanganan error yang lebih baik"""
+    print("Memulai federated averaging...")
     try:
         with torch.no_grad():
             global_params = OrderedDict(global_model.named_parameters())
             
             # Inisialisasi parameter global dengan nol
             for name, param in global_params.items():
+                print(f"[{name}] mean after aggregation: {param.data.mean().item():.6f}")
                 param.data.zero_()
             
             # Pastikan jumlah model dan bobot sama
