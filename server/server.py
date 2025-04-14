@@ -6,7 +6,7 @@ from server.server_util import save_model, send_large_data, recv_large_data, des
 from server.aggregation import federated_averaging
 
 class FederatedLearningServer:
-    def __init__(self, host='0.0.0.0', port=65433, num_clients=1):
+    def __init__(self, host='0.0.0.0', port=65433, num_clients=2):
         self.host = host
         self.port = port
         self.num_clients = num_clients

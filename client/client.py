@@ -4,7 +4,7 @@ import os
 from cnn_model import CNN1D
 from client.data_loader import load_data_from_json, ECGDataset
 from client.trainer import train_local_model
-from client.client_utils import save_model_to_pickle, load_model_from_pickle, send_data, receive_data
+from client.client_utils import save_model_to_pickle, load_model_from_pickle, send_data, receive_data, apply_mask_to_model
 
 class FederatedLearningClient:
     def __init__(self, client_id=0, host='10.34.100.121', port=65433):
@@ -48,9 +48,22 @@ class FederatedLearningClient:
             
             # Train the model locally
             trained_model = train_local_model(local_model, train_loader, epochs=1)
+            print("\n📌 Model parameters BEFORE masking:")
+            for name, param in trained_model.state_dict().items():
+                if param.dtype == torch.float32:
+                    print(f"[{name}] mean: {param.mean().item():.6f}")
+
+            # Apply mask to model
+            masked_model = apply_mask_to_model(trained_model, self.client_id)
+
+            print("\n📌 Model parameters AFTER masking:")
+            for name, param in masked_model.state_dict().items():
+                if param.dtype == torch.float32:
+                    print(f"[{name}] mean: {param.mean().item():.6f}")
+
             
             # Save model to pickle format
-            model_pickle_file = save_model_to_pickle(trained_model, self.local_model_path)
+            model_pickle_file = save_model_to_pickle(masked_model, self.local_model_path)
             
             return model_pickle_file, trained_model
             
