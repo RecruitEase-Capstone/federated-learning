@@ -3,7 +3,7 @@
 ```sh
 git clone https://github.com/RecruitEase-Capstone/federated-learning.git
 ```
-2. Download data.zip [Here!](https://drive.google.com/file/d/1xQRCPCZQhcIybWxeKhLWrXPI0j8e5OrG/view?usp=drivesdk) and extract on `federated-learning` directory
+2. Download data.zip [Here!](https://drive.google.com/file/d/1PcXL4kbVY1w4aWz0rvFgCxPD8Tz9bNVY/view?usp=sharing) and extract on `federated-learning` directory
 3. Create a directory `models` that contains directories  `local` & `global` to create it you can use :
 * Linux
 ```sh
