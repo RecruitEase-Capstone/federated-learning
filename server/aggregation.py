@@ -53,10 +53,10 @@ def federated_averaging(global_model, client_models, client_weights):
                     print(f"Error processing client model {idx}: {model_error}")
                     # Continue with the next model
 
-                print(f"\n✅ Model global AFTER aggregation (expected cancel mask):")
-                for name, param in global_params.items():
-                    if param.dtype == torch.float32:
-                        print(f"  - [{name}] mean: {param.data.mean().item():.6f}")
+            print(f"\n✅ Model global AFTER aggregation (expected cancel mask):")
+            for name, param in global_params.items():
+                if param.dtype == torch.float32:
+                    print(f"  - [{name}] mean: {param.data.mean().item():.6f}")
 
             return global_model
     except Exception as e:

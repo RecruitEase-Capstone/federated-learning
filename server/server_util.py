@@ -69,7 +69,6 @@ def recv_large_data(sock):
                 
                 data.extend(chunk)
                 bytes_received = len(data)
-                print(f"Received chunk {len(chunk)} bytes, total {bytes_received}/{data_size} bytes")
                 timeout_counter = 0  # Reset counter if data successfully received
             except socket.timeout:
                 timeout_counter += 1
