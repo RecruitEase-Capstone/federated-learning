@@ -6,7 +6,7 @@ from server.server_util import save_model, send_large_data, recv_large_data, des
 from server.aggregation import federated_averaging
 
 class FederatedLearningServer:
-    def __init__(self, host='0.0.0.0', port=65433, num_clients=1):
+    def __init__(self, host='0.0.0.0', port=65433, num_clients=2):
         self.host = host
         self.port = port
         self.num_clients = num_clients
@@ -16,6 +16,9 @@ class FederatedLearningServer:
         self.client_lock = threading.Lock()
         self.model_lock = threading.Lock()
         self.save_path = './models/global/'
+        self.all_models_received = False
+        self.client_connections = []
+        self.averaging_complete = threading.Event()
         
         # Ensure directories exist
         os.makedirs(self.save_path, exist_ok=True)
@@ -37,58 +40,71 @@ class FederatedLearningServer:
                 with self.client_lock:
                     self.client_models[client_index] = client_model_data
                     all_received = all(model is not None for model in self.client_models)
+                    
+                    # Store the connection for later response
+                    self.client_connections.append((conn, addr, client_index))
                 
-                # Model to send back to client
-                model_to_send = self.global_model
-                
-                # If all models have been received, perform federated averaging
-                if all_received:
-                    print("All client models received, performing federated averaging...")
+                # If all models have been received, perform federated averaging once
+                if all_received and not self.all_models_received:
                     with self.model_lock:
+                        self.all_models_received = True
+                        print("All client models received, performing federated averaging...")
                         updated_global_model = federated_averaging(
                             self.global_model, 
                             self.client_models, 
                             self.client_weights
                         )
-                        model_to_send = updated_global_model
-                        # Update global model for reference in other threads
+                        # Update global model
                         self.global_model.load_state_dict(updated_global_model.state_dict())
                         print("Global model has been updated.")
                     
                     # Save global model to file
-                    save_model(model_to_send, f'{self.save_path}global_model_round_{client_index + 1}.pkl')
-                
-                # Serialize model for sending to client
-                print(f"Preparing model to send to client {addr}")
-                model_data = serialize_model(model_to_send)
-                print(f"Model serialized: {len(model_data)} bytes")
-                
-                # Send model
+                    save_model(self.global_model, f'{self.save_path}global_model.pkl')
+                    
+                    # Signal that averaging is complete, allowing responses to be sent
+                    self.averaging_complete.set()
+                    
+                    # Now send the updated global model to all clients
+                    self.send_models_to_all_clients()
+                else:
+                    # Wait for averaging to complete before sending model
+                    print(f"Client {addr} waiting for all models to be received...")
+                    # We don't send any model yet, just keep the connection open
+                    
+            except Exception as pickle_error:
+                print(f"Error deserializing model: {pickle_error}")
+                # Close connection on error
+                conn.close()
+                print(f"Connection with {addr} closed due to error")
+        
+        except Exception as e:
+            print(f"Error handling client {addr}: {e}")
+            try:
+                conn.close()
+            except:
+                pass
+    
+    def send_models_to_all_clients(self):
+        """Send the updated global model to all connected clients"""
+        print("Sending global model to all clients")
+        model_data = serialize_model(self.global_model)
+        print(f"Global model serialized: {len(model_data)} bytes")
+        
+        for conn, addr, client_index in self.client_connections:
+            try:
                 print(f"Sending model to client {addr}")
                 if send_large_data(conn, model_data):
                     print(f"Model successfully sent to client {addr}")
                 else:
                     print(f"Failed to send model to client {addr}")
-                    
-            except Exception as pickle_error:
-                print(f"Error deserializing/serializing model: {pickle_error}")
-                # Send empty model as fallback
+            except Exception as e:
+                print(f"Error sending model to client {addr}: {e}")
+            finally:
                 try:
-                    empty_model = CNN1D()
-                    model_data = serialize_model(empty_model)
-                    send_large_data(conn, model_data)
-                    print(f"Empty model sent to client {addr} as fallback")
-                except Exception as fallback_error:
-                    print(f"Failed to send fallback model to client {addr}: {fallback_error}")
-        
-        except Exception as e:
-            print(f"Error handling client {addr}: {e}")
-        finally:
-            try:
-                conn.close()
-                print(f"Connection with {addr} closed")
-            except:
-                pass
+                    conn.close()
+                    print(f"Connection with {addr} closed")
+                except:
+                    pass
     
     def start(self):
         """Start the server and listen for client connections"""
@@ -105,7 +121,7 @@ class FederatedLearningServer:
             try:
                 while client_count < self.num_clients:
                     # Add timeout to accept()
-                    s.settimeout(60)  # 60 seconds timeout
+                    s.settimeout(600)  # 10 minutes timeout
                     try:
                         conn, addr = s.accept()
                         print(f"New client connected: {addr}")
@@ -122,6 +138,36 @@ class FederatedLearningServer:
                     except socket.timeout:
                         print("Timeout waiting for client connection. Continuing with existing clients.")
                         break
+                
+                # Wait for model averaging to complete with timeout
+                self.averaging_complete.wait(timeout=300)  # 5 minutes timeout
+                
+                # If averaging didn't complete, send whatever we have
+                if not self.averaging_complete.is_set():
+                    print("Timeout waiting for all client models. Using available models for averaging.")
+                    with self.model_lock:
+                        # Filter out None values
+                        valid_models = [model for model in self.client_models if model is not None]
+                        valid_weights = [self.client_weights[i] for i, model in enumerate(self.client_models) if model is not None]
+                        
+                        if valid_models:
+                            # Normalize weights
+                            sum_weights = sum(valid_weights)
+                            valid_weights = [w/sum_weights for w in valid_weights]
+                            
+                            # Perform averaging with available models
+                            updated_global_model = federated_averaging(
+                                self.global_model,
+                                valid_models,
+                                valid_weights
+                            )
+                            self.global_model.load_state_dict(updated_global_model.state_dict())
+                            
+                            # Save partial global model
+                            save_model(self.global_model, f'{self.save_path}partial_global_model.pkl')
+                            
+                            # Send models to clients
+                            self.send_models_to_all_clients()
                 
                 # Wait for all threads to finish with timeout
                 print("Waiting for all client threads to finish...")
