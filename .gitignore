@@ -2,4 +2,6 @@ mitbih_database
 data
 data.zip
 .venv
+myenv
 models
+__pycache__
