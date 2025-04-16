@@ -4,8 +4,8 @@ import os
 import numpy as np
 from cnn_model import CNN1D
 from client.data_loader import load_data_from_json, ECGDataset
-from client.client_utils import save_model_to_pickle, load_model_from_pickle, send_data, receive_data
-from torch.utils.data import random_split
+from client.trainer import train_local_model
+from client.client_utils import save_model_to_pickle, load_model_from_pickle, send_data, receive_data, apply_mask_to_model
 
 class FederatedLearningClient:
     def __init__(self, client_id=3, host='localhost', port=65433, val_split=0.2):
@@ -77,16 +77,24 @@ class FederatedLearningClient:
             local_model = CNN1D(num_classes=num_classes)
             print(f"Model will classify {num_classes} classes: {label_names}")
             
-            # Check shape of input data for debugging
-            for inputs, labels in train_loader:
-                print(f"Input data shape: {inputs.shape}")
-                break
-            
-            # Modified training function call to include validation data
-            trained_model = self.train_model_with_validation(local_model, train_loader, self.val_loader, epochs=1)
+            # Train the model locally
+            trained_model = train_local_model(local_model, train_loader, epochs=1)
+            print("\n📌 Model parameters BEFORE masking:")
+            for name, param in trained_model.state_dict().items():
+                if param.dtype == torch.float32:
+                    print(f"[{name}] mean: {param.mean().item():.6f}")
+
+            # Apply mask to model
+            masked_model = apply_mask_to_model(trained_model, self.client_id)
+
+            print("\n📌 Model parameters AFTER masking:")
+            for name, param in masked_model.state_dict().items():
+                if param.dtype == torch.float32:
+                    print(f"[{name}] mean: {param.mean().item():.6f}")
+
             
             # Save model to pickle format
-            model_pickle_file = save_model_to_pickle(trained_model, self.local_model_path)
+            model_pickle_file = save_model_to_pickle(masked_model, self.local_model_path)
             
             return model_pickle_file, trained_model
             

@@ -36,6 +36,8 @@ def federated_averaging(global_model, client_models, client_weights):
                         client_state_dict = client_model_data['state_dict']
                         for name, param in global_params.items():
                             if name in client_state_dict:
+                                mean_val = client_state_dict[name].mean().item()
+                                print(f" before - [{name}] mean: {mean_val:.6f}")
                                 param.data += client_state_dict[name].data * weight
                             else:
                                 print(f"WARNING: Parameter {name} not found in client model {idx}")
@@ -50,7 +52,12 @@ def federated_averaging(global_model, client_models, client_weights):
                 except Exception as model_error:
                     print(f"Error processing client model {idx}: {model_error}")
                     # Continue with the next model
-            
+
+                print(f"\n✅ Model global AFTER aggregation (expected cancel mask):")
+                for name, param in global_params.items():
+                    if param.dtype == torch.float32:
+                        print(f"  - [{name}] mean: {param.data.mean().item():.6f}")
+
             return global_model
     except Exception as e:
         print(f"Error in federated averaging: {e}")
